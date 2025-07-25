@@ -1,311 +1,278 @@
 // ==UserScript==
-// @name         SignalR Multi-Device Manager
+// @name         ChatGPT Prompt Manager
 // @namespace    http://tampermonkey.net/
-// @version      2.0
-// @description  Compact SignalR manager with multiple device support
-// @author       Marta
-// @match        *://localhost:5112/*
+// @version      1.0
+// @description  Manages custom prompts for ChatGPT with a dropdown menu
+// @author       You
+// @match        https://chatgpt.com/*
 // @grant        none
-// @require      https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.5/dist/browser/signalr.min.js
 // ==/UserScript==
+
+
 
 (function () {
   'use strict';
 
-  // Load saved config
-  const savedConfig = localStorage.getItem('signalr_devices_config') || '[]';
-  let devicesConfig = [];
+  const localKey = "chatgpt_prompt_objects";
+  let prompts = [];
 
-  try {
-    devicesConfig = JSON.parse(savedConfig);
-  } catch (e) {
-    devicesConfig = [];
-  }
-
-  // Store connections
-  const connections = new Map();
-
-  // === MAIN CONTAINER ===
-  const container = document.createElement('div');
-  container.style.position = 'fixed';
-  container.style.top = '20px';
-  container.style.right = '20px';
-  container.style.zIndex = '9999';
-  container.style.backgroundColor = '#2c3e50';
-  container.style.border = '1px solid #34495e';
-  container.style.borderRadius = '8px';
-  container.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
-  container.style.fontFamily = 'Consolas, monospace';
-  container.style.fontSize = '12px';
-
-  // === TOGGLE BUTTON (COMPACT) ===
-  const toggleBtn = document.createElement('button');
-  toggleBtn.textContent = '⚙️';
-  toggleBtn.style.width = '40px';
-  toggleBtn.style.height = '40px';
-  toggleBtn.style.backgroundColor = '#3498db';
-  toggleBtn.style.color = '#fff';
-  toggleBtn.style.border = 'none';
-  toggleBtn.style.borderRadius = '8px';
-  toggleBtn.style.cursor = 'pointer';
-  toggleBtn.style.fontSize = '16px';
-  toggleBtn.style.display = 'block';
-
-  // === EXPANDED PANEL ===
-  const panel = document.createElement('div');
-  panel.style.display = 'none';
-  panel.style.width = '400px';
-  panel.style.padding = '16px';
-  panel.style.backgroundColor = '#2c3e50';
-  panel.style.color = '#ecf0f1';
-
-  // === DEVICES LIST ===
-  const devicesContainer = document.createElement('div');
-  devicesContainer.style.marginBottom = '12px';
-
-  // === CONFIG INPUT ===
-  const configLabel = document.createElement('div');
-  configLabel.textContent = 'Devices Config (JSON):';
-  configLabel.style.marginBottom = '4px';
-  configLabel.style.color = '#bdc3c7';
-
-  const configTextarea = document.createElement('textarea');
-  configTextarea.placeholder = '[{"token":"your_token","sessionId":"session1"},{"token":"your_token2","sessionId":"session2"}]';
-  configTextarea.value = JSON.stringify(devicesConfig, null, 2);
-  configTextarea.style.width = '100%';
-  configTextarea.style.height = '120px';
-  configTextarea.style.backgroundColor = '#34495e';
-  configTextarea.style.color = '#ecf0f1';
-  configTextarea.style.border = '1px solid #7f8c8d';
-  configTextarea.style.borderRadius = '4px';
-  configTextarea.style.padding = '8px';
-  configTextarea.style.fontSize = '11px';
-  configTextarea.style.fontFamily = 'Consolas, monospace';
-  configTextarea.style.resize = 'vertical';
-
-  const saveConfigBtn = document.createElement('button');
-  saveConfigBtn.textContent = '💾 Save Config';
-  saveConfigBtn.style.marginTop = '8px';
-  saveConfigBtn.style.padding = '6px 12px';
-  saveConfigBtn.style.backgroundColor = '#27ae60';
-  saveConfigBtn.style.color = '#fff';
-  saveConfigBtn.style.border = 'none';
-  saveConfigBtn.style.borderRadius = '4px';
-  saveConfigBtn.style.cursor = 'pointer';
-
-  // === LOG AREA ===
-  const logContainer = document.createElement('div');
-  logContainer.style.marginTop = '12px';
-  logContainer.style.height = '200px';
-  logContainer.style.backgroundColor = '#1a252f';
-  logContainer.style.border = '1px solid #34495e';
-  logContainer.style.borderRadius = '4px';
-  logContainer.style.padding = '8px';
-  logContainer.style.overflow = 'auto';
-  logContainer.style.fontSize = '10px';
-  logContainer.style.fontFamily = 'Consolas, monospace';
-
-  // Build panel
-  panel.appendChild(devicesContainer);
-  panel.appendChild(configLabel);
-  panel.appendChild(configTextarea);
-  panel.appendChild(saveConfigBtn);
-  panel.appendChild(logContainer);
-
-  container.appendChild(toggleBtn);
-  container.appendChild(panel);
-  document.body.appendChild(container);
-
-  // === TOGGLE FUNCTIONALITY ===
-  let panelVisible = false;
-  toggleBtn.onclick = () => {
-    panelVisible = !panelVisible;
-    panel.style.display = panelVisible ? 'block' : 'none';
-    container.style.backgroundColor = panelVisible ? '#2c3e50' : 'transparent';
-    container.style.border = panelVisible ? '1px solid #34495e' : 'none';
-    // Updated toggle button styling - no background when expanded, white color
-    toggleBtn.style.backgroundColor = panelVisible ? 'transparent' : '#3498db';
-    toggleBtn.style.color = panelVisible ? '#fff' : '#fff';
-    toggleBtn.textContent = panelVisible ? '✖' : '⚙️';
-  };
-
-  // === LOGGING FUNCTION ===
-  function addLog(deviceIndex, message, type = 'info') {
-    const timestamp = new Date().toLocaleTimeString();
-    const colors = {
-      info: '#3498db',
-      success: '#27ae60',
-      error: '#e74c3c',
-      warning: '#f39c12'
-    };
-
-    const logEntry = document.createElement('div');
-    logEntry.innerHTML = `<span style="color:#7f8c8d">[${timestamp}]</span> <span style="color:${colors[type]}">[Device ${deviceIndex + 1}]</span> ${message}`;
-    logEntry.style.marginBottom = '2px';
-    logContainer.appendChild(logEntry);
-    logContainer.scrollTop = logContainer.scrollHeight;
-  }
-
-  // === CREATE DEVICE ROW ===
-  function createDeviceRow(device, index) {
-    const row = document.createElement('div');
-    row.style.display = 'flex';
-    row.style.alignItems = 'center';
-    row.style.marginBottom = '8px';
-    row.style.padding = '8px';
-    row.style.backgroundColor = '#34495e';
-    row.style.borderRadius = '4px';
-
-    const deviceName = document.createElement('span');
-    deviceName.textContent = `Device ${index + 1}`;
-    deviceName.style.flex = '1';
-    deviceName.style.color = '#ecf0f1';
-    deviceName.style.fontWeight = 'bold';
-
-    const statusIndicator = document.createElement('span');
-    statusIndicator.textContent = '⚫';
-    statusIndicator.style.marginLeft = '8px';
-    statusIndicator.id = `status-${index}`;
-
-    const connectBtn = document.createElement('button');
-    connectBtn.textContent = 'Connect';
-    connectBtn.style.marginLeft = '8px';
-    connectBtn.style.padding = '4px 8px';
-    connectBtn.style.backgroundColor = '#27ae60';
-    connectBtn.style.color = '#fff';
-    connectBtn.style.border = 'none';
-    connectBtn.style.borderRadius = '3px';
-    connectBtn.style.cursor = 'pointer';
-    connectBtn.id = `connect-btn-${index}`;
-
-    const disconnectBtn = document.createElement('button');
-    disconnectBtn.textContent = 'Stop';
-    disconnectBtn.style.marginLeft = '8px';
-    disconnectBtn.style.padding = '4px 8px';
-    disconnectBtn.style.backgroundColor = '#e74c3c';
-    disconnectBtn.style.color = '#fff';
-    disconnectBtn.style.border = 'none';
-    disconnectBtn.style.borderRadius = '3px';
-    disconnectBtn.style.cursor = 'pointer';
-    disconnectBtn.style.display = 'none';
-    disconnectBtn.id = `disconnect-btn-${index}`;
-
-    // Toggle functionality
-    connectBtn.onclick = () => {
-      connectDevice(device, index);
-      connectBtn.style.display = 'none';
-      disconnectBtn.style.display = 'inline-block';
-    };
-
-    disconnectBtn.onclick = () => {
-      disconnectDevice(index);
-      disconnectBtn.style.display = 'none';
-      connectBtn.style.display = 'inline-block';
-    };
-
-    row.appendChild(deviceName);
-    row.appendChild(statusIndicator);
-    row.appendChild(connectBtn);
-    row.appendChild(disconnectBtn);
-
-    return row;
-  }
-
-  // === CONNECTION FUNCTIONS ===
-  function connectDevice(device, index) {
-    if (connections.has(index)) {
-      addLog(index, 'Already connected', 'warning');
-      return;
-    }
-
-    const hubUrl = `http://localhost:5112/hubs/store-service?sessionId=${device.sessionId}`;
-    addLog(index, `Connecting to: ${hubUrl}`, 'info');
-
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl(hubUrl, {
-        accessTokenFactory: () => device.token
-      })
-      .configureLogging(signalR.LogLevel.Information)
-      .withAutomaticReconnect()
-      .build();
-
-    connection.on('OrderUpdated', function (data) {
-      addLog(index, `OrderUpdated: ${JSON.stringify(data)}`, 'success');
-    });
-
-    connection.onreconnecting(() => {
-      addLog(index, 'Reconnecting...', 'warning');
-      updateStatus(index, '🟡');
-    });
-
-    connection.onreconnected(() => {
-      addLog(index, 'Reconnected successfully', 'success');
-      updateStatus(index, '🟢');
-    });
-
-    connection.onclose(() => {
-      addLog(index, 'Connection closed', 'error');
-      updateStatus(index, '🔴');
-      connections.delete(index);
-    });
-
-    connection
-      .start()
-      .then(() => {
-        addLog(index, 'Connected successfully!', 'success');
-        updateStatus(index, '🟢');
-        connections.set(index, connection);
-      })
-      .catch((err) => {
-        addLog(index, `Connection failed: ${err.message}`, 'error');
-        updateStatus(index, '🔴');
-      });
-  }
-
-  function disconnectDevice(index) {
-    const connection = connections.get(index);
-    if (connection) {
-      connection.stop();
-      connections.delete(index);
-      addLog(index, 'Disconnected manually', 'info');
-      updateStatus(index, '⚫');
-    }
-  }
-
-  function updateStatus(index, status) {
-    const statusEl = document.getElementById(`status-${index}`);
-    if (statusEl) statusEl.textContent = status;
-  }
-
-  // === REFRESH DEVICES LIST ===
-  function refreshDevicesList() {
-    devicesContainer.innerHTML = '';
-    devicesConfig.forEach((device, index) => {
-      const row = createDeviceRow(device, index);
-      devicesContainer.appendChild(row);
-    });
-  }
-
-  // === SAVE CONFIG ===
-  saveConfigBtn.onclick = () => {
+  function loadPrompts() {
+    const data = localStorage.getItem(localKey);
     try {
-      const newConfig = JSON.parse(configTextarea.value);
-      devicesConfig = newConfig;
-      localStorage.setItem('signalr_devices_config', JSON.stringify(devicesConfig));
-      refreshDevicesList();
-      addLog(-1, `Configuration saved. ${devicesConfig.length} devices loaded.`, 'success');
+      prompts = data ? JSON.parse(data) : [];
     } catch (e) {
-      addLog(-1, `Invalid JSON format: ${e.message}`, 'error');
+      prompts = [];
     }
-  };
+  }
 
-  // === CLEANUP ON UNLOAD ===
-  window.addEventListener('beforeunload', () => {
-    connections.forEach(connection => connection.stop());
+  function savePrompts() {
+    localStorage.setItem(localKey, JSON.stringify(prompts));
+  }
+
+  function insertPrompt(content) {
+    const editor = document.querySelector("#prompt-textarea");
+    if (editor) {
+      editor.focus();
+      document.getSelection().selectAllChildren(editor);
+      document.execCommand("delete", false, null);
+      document.execCommand("insertText", false, content);
+    } else {
+      alert("Prompt input not found!");
+    }
+  }
+
+  function createPromptMenu() {
+    loadPrompts();
+
+    const wrapper = document.createElement("div");
+    wrapper.style.position = "fixed";
+    wrapper.style.top = "50px";
+    wrapper.style.right = "20px";
+    wrapper.style.zIndex = 9999;
+    wrapper.style.fontFamily = "Arial";
+
+    const menuBtn = document.createElement("button");
+    menuBtn.textContent = "☰";
+    menuBtn.style.color = "#000";
+    menuBtn.style.fontSize = "20px";
+    menuBtn.style.padding = "6px 12px";
+    menuBtn.style.marginBottom = "5px";
+    menuBtn.style.borderRadius = "6px";
+    menuBtn.style.border = "1px solid #ccc";
+    menuBtn.style.background = "#f9f9f9";
+    menuBtn.style.cursor = "pointer";
+    menuBtn.style.boxShadow = "0 2px 6px rgba(0,0,0,0.1)";
+
+    const dropdown = document.createElement("div");
+    dropdown.style.display = "none";
+    dropdown.style.marginTop = "10px";
+    dropdown.style.background = "#fff";
+    dropdown.style.border = "1px solid #ccc";
+    dropdown.style.borderRadius = "8px";
+    dropdown.style.padding = "10px";
+    dropdown.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
+    dropdown.style.minWidth = "300px";
+
+    const select = document.createElement("select");
+    select.style.marginBottom = "10px";
+    select.style.width = "100%";
+    select.style.padding = "5px";
+    select.style.border = "1px solid #ccc";
+    select.style.borderRadius = "4px";
+    select.style.color = "#000";
+
+function refreshOptions(selectedIndex = null) {
+  select.innerHTML = "";
+
+  // ➕ Thêm option "No prompt"
+  const emptyOption = document.createElement("option");
+  emptyOption.value = "";
+  emptyOption.textContent = "-- No prompt --";
+  select.appendChild(emptyOption);
+
+  prompts.forEach((item, index) => {
+    const option = document.createElement("option");
+    option.value = index;
+    option.textContent = item.title || `Prompt ${index + 1}`;
+    select.appendChild(option);
   });
 
-  // Initialize
-  refreshDevicesList();
-  addLog(-1, 'SignalR Manager initialized', 'info');
+  // ✅ Không chọn gì cả lúc đầu hoặc chọn lại mục đã được chỉ định
+  if (selectedIndex !== null) {
+    select.selectedIndex = selectedIndex + 1; // +1 vì có thêm "-- No prompt --"
+  } else {
+    select.selectedIndex = 0;
+  }
+}
 
+
+select.onchange = () => {
+  const editor = document.querySelector("#prompt-textarea");
+
+  if (select.value === "") {
+    // Khi chọn "-- No prompt --", xóa nội dung input
+    if (editor) {
+      editor.focus();
+      document.getSelection().selectAllChildren(editor);
+      document.execCommand("delete", false, null);
+    }
+    return;
+  }
+
+  const selected = parseInt(select.value);
+  if (!isNaN(selected)) {
+    insertPrompt(prompts[selected].content);
+  }
+};
+
+
+
+
+
+    refreshOptions();
+
+    const formWrapper = document.createElement("div");
+    formWrapper.style.display = "none";
+    formWrapper.style.marginTop = "10px";
+
+    const titleInput = document.createElement("input");
+    titleInput.placeholder = "Title";
+    titleInput.style.width = "100%";
+    titleInput.style.marginBottom = "5px";
+    titleInput.style.padding = "6px";
+    titleInput.style.color = "#000";
+    titleInput.style.border = "1px solid #ccc";
+    titleInput.style.borderRadius = "4px";
+
+    const contentInput = document.createElement("textarea");
+    contentInput.placeholder = "Prompt content...";
+    contentInput.style.width = "100%";
+    contentInput.style.height = "100px";
+    contentInput.style.padding = "6px";
+    contentInput.style.marginBottom = "5px";
+    contentInput.style.color = "#000";
+    contentInput.style.border = "1px solid #ccc";
+    contentInput.style.borderRadius = "4px";
+
+    const saveFormBtn = document.createElement("button");
+    saveFormBtn.textContent = "💾 Save";
+    saveFormBtn.style.color = "#000";
+    saveFormBtn.style.marginRight = "5px";
+    saveFormBtn.style.padding = "6px 10px";
+    saveFormBtn.style.border = "1px solid #ccc";
+    saveFormBtn.style.borderRadius = "4px";
+
+    const cancelFormBtn = document.createElement("button");
+    cancelFormBtn.textContent = "❌ Cancel";
+    cancelFormBtn.style.color = "#000";
+    cancelFormBtn.style.padding = "6px 10px";
+    cancelFormBtn.style.border = "1px solid #ccc";
+    cancelFormBtn.style.borderRadius = "4px";
+
+    formWrapper.appendChild(titleInput);
+    formWrapper.appendChild(contentInput);
+    formWrapper.appendChild(saveFormBtn);
+    formWrapper.appendChild(cancelFormBtn);
+
+    let editingIndex = null;
+
+    const controlRow = document.createElement("div");
+    controlRow.style.display = "flex";
+    controlRow.style.justifyContent = "flex-end";
+    controlRow.style.marginBottom = "10px";
+    const addBtn = document.createElement("button");
+    addBtn.textContent = "➕";
+    addBtn.style.fontSize = "18px";
+    addBtn.style.marginRight = "8px";
+
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "✏️";
+    editBtn.style.fontSize = "18px";
+    editBtn.style.marginRight = "8px";
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "🗑️";
+    deleteBtn.style.fontSize = "18px";
+
+    [addBtn, editBtn, deleteBtn].forEach(btn => {
+      btn.style.padding = "6px 10px";
+      btn.style.border = "1px solid #ccc";
+      btn.style.borderRadius = "6px";
+      btn.style.cursor = "pointer";
+      btn.style.background = "#fff";
+    });
+
+    addBtn.onclick = () => {
+      editingIndex = null;
+      titleInput.value = "";
+      contentInput.value = "";
+      formWrapper.style.display = "block";
+    };
+
+    editBtn.onclick = () => {
+      const selected = parseInt(select.value);
+      if (isNaN(selected)) return;
+      editingIndex = selected;
+      titleInput.value = prompts[selected].title;
+      contentInput.value = prompts[selected].content;
+      formWrapper.style.display = "block";
+    };
+
+    deleteBtn.onclick = () => {
+      const selected = parseInt(select.value);
+      if (isNaN(selected)) return;
+      if (confirm("Delete this prompt?")) {
+        prompts.splice(selected, 1);
+        savePrompts();
+        refreshOptions();
+      }
+    };
+
+    controlRow.appendChild(addBtn);
+    controlRow.appendChild(editBtn);
+    controlRow.appendChild(deleteBtn);
+
+    saveFormBtn.onclick = () => {
+      const title = titleInput.value.trim();
+      const content = contentInput.value.trim();
+      if (!title || !content) return alert("Fields cannot be empty!");
+
+      let selectedAfter = 0;
+      if (editingIndex !== null) {
+        prompts[editingIndex] = { title, content };
+        selectedAfter = editingIndex;
+      } else {
+        prompts.push({ title, content });
+        selectedAfter = prompts.length - 1;
+      }
+      savePrompts();
+      refreshOptions(selectedAfter);
+        insertPrompt(prompts[selectedAfter].content);
+
+      formWrapper.style.display = "none";
+    };
+
+    cancelFormBtn.onclick = () => {
+      formWrapper.style.display = "none";
+    };
+
+    menuBtn.onclick = () => {
+      dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
+    };
+
+    dropdown.appendChild(select);
+    dropdown.appendChild(controlRow);
+    dropdown.appendChild(formWrapper);
+
+    wrapper.appendChild(menuBtn);
+    wrapper.appendChild(dropdown);
+    document.body.appendChild(wrapper);
+  }
+
+  const waitInterval = setInterval(() => {
+    if (document.querySelector("#prompt-textarea")) {
+      clearInterval(waitInterval);
+      createPromptMenu();
+    }
+  }, 1000);
 })();
