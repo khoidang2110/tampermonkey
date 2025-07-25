@@ -1,14 +1,4 @@
 // ==UserScript==
-// @name         SignalR Test Connection with Input & Toggle
-// @namespace    http://tampermonkey.net/
-// @version      1.2
-// @description  Add UI to connect SignalR hub with token/sessionId input + toggle visibility + persistent storage
-// @author       Marta
-// @match        *://localhost:5112/*
-// @grant        none
-// @require      https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.5/dist/browser/signalr.min.js
-// ==/UserScript==
-// ==UserScript==
 // @name         SignalR Multi-Device Manager
 // @namespace    http://tampermonkey.net/
 // @version      2.0
@@ -133,8 +123,10 @@
     panel.style.display = panelVisible ? 'block' : 'none';
     container.style.backgroundColor = panelVisible ? '#2c3e50' : 'transparent';
     container.style.border = panelVisible ? '1px solid #34495e' : 'none';
-    toggleBtn.style.backgroundColor = panelVisible ? '#e74c3c' : '#3498db';
-    toggleBtn.textContent = panelVisible ? '✖️' : '⚙️';
+    // Updated toggle button styling - no background when expanded, white color
+    toggleBtn.style.backgroundColor = panelVisible ? 'transparent' : '#3498db';
+    toggleBtn.style.color = panelVisible ? '#fff' : '#fff';
+    toggleBtn.textContent = panelVisible ? '✖' : '⚙️';
   };
 
   // === LOGGING FUNCTION ===
@@ -184,37 +176,37 @@
     connectBtn.style.border = 'none';
     connectBtn.style.borderRadius = '3px';
     connectBtn.style.cursor = 'pointer';
+    connectBtn.id = `connect-btn-${index}`;
 
     const disconnectBtn = document.createElement('button');
     disconnectBtn.textContent = 'Stop';
-    disconnectBtn.style.marginLeft = '4px';
+    disconnectBtn.style.marginLeft = '8px';
     disconnectBtn.style.padding = '4px 8px';
     disconnectBtn.style.backgroundColor = '#e74c3c';
     disconnectBtn.style.color = '#fff';
     disconnectBtn.style.border = 'none';
     disconnectBtn.style.borderRadius = '3px';
     disconnectBtn.style.cursor = 'pointer';
+    disconnectBtn.style.display = 'none';
+    disconnectBtn.id = `disconnect-btn-${index}`;
 
-    const reconnectBtn = document.createElement('button');
-    reconnectBtn.textContent = 'Reconnect';
-    reconnectBtn.style.marginLeft = '4px';
-    reconnectBtn.style.padding = '4px 8px';
-    reconnectBtn.style.backgroundColor = '#f39c12';
-    reconnectBtn.style.color = '#fff';
-    reconnectBtn.style.border = 'none';
-    reconnectBtn.style.borderRadius = '3px';
-    reconnectBtn.style.cursor = 'pointer';
+    // Toggle functionality
+    connectBtn.onclick = () => {
+      connectDevice(device, index);
+      connectBtn.style.display = 'none';
+      disconnectBtn.style.display = 'inline-block';
+    };
 
-    // Connect functionality
-    connectBtn.onclick = () => connectDevice(device, index);
-    disconnectBtn.onclick = () => disconnectDevice(index);
-    reconnectBtn.onclick = () => reconnectDevice(device, index);
+    disconnectBtn.onclick = () => {
+      disconnectDevice(index);
+      disconnectBtn.style.display = 'none';
+      connectBtn.style.display = 'inline-block';
+    };
 
     row.appendChild(deviceName);
     row.appendChild(statusIndicator);
     row.appendChild(connectBtn);
     row.appendChild(disconnectBtn);
-    row.appendChild(reconnectBtn);
 
     return row;
   }
@@ -278,11 +270,6 @@
       addLog(index, 'Disconnected manually', 'info');
       updateStatus(index, '⚫');
     }
-  }
-
-  function reconnectDevice(device, index) {
-    disconnectDevice(index);
-    setTimeout(() => connectDevice(device, index), 1000);
   }
 
   function updateStatus(index, status) {
