@@ -176,7 +176,7 @@
     statusIndicator.id = `status-${index}`;
 
     const connectBtn = document.createElement('button');
-    connectBtn.textContent = '▶️';
+    connectBtn.textContent = 'Connect';
     connectBtn.style.marginLeft = '8px';
     connectBtn.style.padding = '4px 8px';
     connectBtn.style.backgroundColor = '#27ae60';
@@ -186,7 +186,7 @@
     connectBtn.style.cursor = 'pointer';
 
     const disconnectBtn = document.createElement('button');
-    disconnectBtn.textContent = '⏹️';
+    disconnectBtn.textContent = 'Stop';
     disconnectBtn.style.marginLeft = '4px';
     disconnectBtn.style.padding = '4px 8px';
     disconnectBtn.style.backgroundColor = '#e74c3c';
@@ -196,7 +196,7 @@
     disconnectBtn.style.cursor = 'pointer';
 
     const reconnectBtn = document.createElement('button');
-    reconnectBtn.textContent = '🔄';
+    reconnectBtn.textContent = 'Reconnect';
     reconnectBtn.style.marginLeft = '4px';
     reconnectBtn.style.padding = '4px 8px';
     reconnectBtn.style.backgroundColor = '#f39c12';
